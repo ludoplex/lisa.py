@@ -36,7 +36,7 @@ BASE00 = '#657b83'
 VERTICAL_LINE = "\u2502"
 HORIZONTAL_LINE = "\u2500"
 
-__prompt__ = f"'(lisa:>) '"
+__prompt__ = "'(lisa:>) '"
 
 # from CW
 MINIMUM_RECURSION_LENGTH = 300
@@ -114,7 +114,7 @@ def get_target_triple():
 
 def get_target_arch():
 	arch = lldb.debugger.GetSelectedTarget().triple.split('-')[0]
-	if arch == "arm64" or arch=="arm64e":
+	if arch in ["arm64", "arm64e"]:
 		return AARCH64()
 	elif arch == "x86_64":
 		return X8664()
@@ -129,7 +129,7 @@ def load_manual():
 
 	for arch in archs:
 		path 	= pathlib.Path(__file__).parent.absolute()
-		dbpath 	= os.path.join(path, "resources/archs", arch + ".sql")
+		dbpath = os.path.join(path, "resources/archs", f"{arch}.sql")
 
 		con = sqlite3.connect(":memory:")
 		con.text_factory = str
@@ -151,14 +151,14 @@ def load_manual():
 		for (inst, data) in inst_map.items():
 			data = data[0]
 
-			if data[0:3] == "-R:":
+			if data[:3] == "-R:":
 				ref = data[3:]
 
 				if ref in inst_map:
 					inst_map[inst] = inst_map[ref]
 
 		dlog(f"Manual loaded for architecture: {arch}")
-	
+
 	return True
 
 def run_shell_command(command, shell=True):
@@ -203,7 +203,7 @@ def load_command(module, command, filename):
 
 	name = command.name()
 
-	key = filename + "_" + name
+	key = f"{filename}_{name}"
 
 	helpText = (
 		command.description().strip().splitlines()[0]
@@ -211,7 +211,7 @@ def load_command(module, command, filename):
 
 	module._loadedFunctions[key] = func
 
-	functionName = "__" + key
+	functionName = f"__{key}"
 
 	lldb.debugger.HandleCommand(
 		"script "
@@ -240,7 +240,7 @@ def validate_args_for_command(args, command):
 		for defaultArg in defaultArgsToAppend:
 			if defaultArg:
 				arg = command.args()[index]
-				print("Whoops! You are missing the <" + arg.argName + "> argument.")
+				print(f"Whoops! You are missing the <{arg.argName}> argument.")
 				print("\nUsage: " + usage_for_command(command))
 				return
 			index += 1
@@ -284,16 +284,16 @@ def help_for_command(command):
 		for arg in command.args():
 			help += "\n  <" + arg.argName + ">; "
 			if arg.argType:
-				help += "Type: " + arg.argType + "; "
+				help += f"Type: {arg.argType}; "
 			help += arg.help
-			argSyntax += " <" + arg.argName + ">"
+			argSyntax += f" <{arg.argName}>"
 
 	if command.options():
 		help += "\n\nOptions:"
 		for option in command.options():
 
 			if option.longName and option.shortName:
-				optionFlag = option.longName + "/" + option.shortName
+				optionFlag = f"{option.longName}/{option.shortName}"
 			elif option.longName:
 				optionFlag = option.longName
 			else:
@@ -302,13 +302,13 @@ def help_for_command(command):
 			help += "\n  " + optionFlag + " "
 
 			if not option.boolean:
-				help += "<" + option.argName + ">; Type: " + option.argType
+				help += f"<{option.argName}>; Type: {option.argType}"
 
-			help += "; " + option.help
+			help += f"; {option.help}"
 
 			optionSyntax += " [{name}{arg}]".format(
 				name=(option.longName or option.shortName),
-				arg=("" if option.boolean else ("=" + option.argName)),
+				arg="" if option.boolean else f"={option.argName}",
 			)
 
 	help += "\n\nSyntax: " + command.name() + optionSyntax + argSyntax
@@ -322,11 +322,7 @@ def help_for_command(command):
 def usage_for_command(command):
 	usage = command.name()
 	for arg in command.args():
-		if arg.default:
-			usage += " [" + arg.argName + "]"
-		else:
-			usage += " " + arg.argName
-
+		usage += f" [{arg.argName}]" if arg.default else f" {arg.argName}"
 	return usage
 
 class CommandArgument:  # noqa B903
@@ -407,7 +403,7 @@ def visual_hexdump(buffer, start=0, end=None, columns=64):
 	count = (end or -1) - start
 	read = 0
 	while read != count:
-		if end == None:
+		if end is None:
 			to_read = io.DEFAULT_BUFFER_SIZE
 		else:
 			to_read = min(count - read, io.DEFAULT_BUFFER_SIZE)
@@ -430,7 +426,7 @@ def visual_hexdump(buffer, start=0, end=None, columns=64):
 		read += len(buf)
 
 HEADER = '┌────────────────┬─────────────────────────┬─────────────────────────┬────────┬────────┐'
-FOOTER = RST+'└────────────────┴─────────────────────────┴─────────────────────────┴────────┴────────┘'
+FOOTER = f'{RST}└────────────────┴─────────────────────────┴─────────────────────────┴────────┴────────┘'
 LINE_FORMATTER = '│' + '' + '{:016x}' + '│ {}' + '│{}'  + '│' + RST
 
 def hexmod(b: int) -> str:
@@ -440,13 +436,13 @@ def hexmod(b: int) -> str:
 def colored(b: int) -> (str, str):
 	ch = chr(b)
 	hx = hexmod(b)
-	if '\x00' == ch:
-		return RST + hx , RST + "."
+	if ch == '\x00':
+		return RST + hx, f"{RST}."
 	elif ch in string.ascii_letters + string.digits + string.punctuation:
 		return CYN + hx, CYN + ch
 	elif ch in string.whitespace:
-		return GRN + hx, ' ' if ' ' == ch else GRN + '_'
-	return YEL + hx, YEL + '.'
+		return GRN + hx, ' ' if ch == ' ' else f'{GRN}_'
+	return YEL + hx, f'{YEL}.'
 
 def hexdump(buf, address):
 	cache = {hexmod(b): colored(b) for b in range(256)} #0x00 - 0xff
@@ -455,41 +451,34 @@ def hexdump(buf, address):
 	print(HEADER)
 	cur = 0
 	row = address
-	line = buf[cur:cur+16]
-	while line:
+	while line := buf[cur : cur + 16]:
 		line_hex = line.hex().ljust(32)
 
 		hexbytes = ''
 		printable = ''
 		for i in range(0, len(line_hex), 2):
 			hbyte, abyte = cache[line_hex[i:i+2]]
-			hexbytes += hbyte + ' ' if i != 14 else hbyte + ' ┊ '
-			printable += abyte if i != 14 else abyte + '┊'
+			hexbytes += f'{hbyte} ' if i != 14 else f'{hbyte} ┊ '
+			printable += abyte if i != 14 else f'{abyte}┊'
 
 		print(LINE_FORMATTER.format(row, hexbytes, printable))
-		
+
 		row += 0x10
 		cur += 0x10
-		line = buf[cur:cur+16]
-	
 	print(FOOTER)
 
 def swap_unpack_char():
 	"""Returns the unpack prefix that will for non-native endian-ness."""
-	if struct.pack('H', 1).startswith("\x00"):
-		return '<'
-	return '>'
+	return '<' if struct.pack('H', 1).startswith("\x00") else '>'
 
 def dump_hex_bytes(addr, s, bytes_per_line=8):
-	i = 0
 	line = ''
-	for ch in s:
+	for i, ch in enumerate(s):
 		if (i % bytes_per_line) == 0:
 			if line:
 				print(line)
 			line = '%#8.8x: ' % (addr + i)
 		line += "%02x " % ch
-		i += 1
 	print(line)
 
 def dump_hex_byte_string_diff(addr, a, b, bytes_per_line=16):
@@ -497,10 +486,7 @@ def dump_hex_byte_string_diff(addr, a, b, bytes_per_line=16):
 	line = ''
 	a_len = len(a)
 	b_len = len(b)
-	if a_len < b_len:
-		max_len = b_len
-	else:
-		max_len = a_len
+	max_len = max(a_len, b_len)
 	tty_colors = TerminalColors(True)
 	for i in range(max_len):
 		ch = None
@@ -555,7 +541,7 @@ class FileExtract:
 
 		self.file = f
 		self.byte_order = b
-		self.offsets = list()
+		self.offsets = []
 
 	def set_byte_order(self, b):
 		'''Set the byte order, valid values are "big", "little", "swap", "native", "<", ">", "@", "="'''
@@ -568,10 +554,10 @@ class FileExtract:
 			self.byte_order = swap_unpack_char()
 		elif b == 'native':
 			self.byte_order = '='
-		elif b == '<' or b == '>' or b == '@' or b == '=':
+		elif b in ['<', '>', '@', '=']:
 			self.byte_order = b
 		else:
-			print("error: invalid byte order specified: '%s'" % b)
+			print(f"error: invalid byte order specified: '{b}'")
 
 	def is_in_memory(self):
 		return False
@@ -588,9 +574,7 @@ class FileExtract:
 
 	def read_size(self, byte_size):
 		s = self.file.read(byte_size)
-		if len(s) != byte_size:
-			return None
-		return s
+		return None if len(s) != byte_size else s
 
 	def push_offset_and_seek(self, offset):
 		'''Push the current file offset and seek to "offset"'''
@@ -604,75 +588,59 @@ class FileExtract:
 
 	def get_sint8(self, fail_value=0):
 		'''Extract a single int8_t from the binary file at the current file position, returns a single integer'''
-		s = self.read_size(1)
-		if s:
-			v, = struct.unpack(self.byte_order + 'b', s)
-			return v
-		else:
+		if not (s := self.read_size(1)):
 			return fail_value
+		v, = struct.unpack(f'{self.byte_order}b', s)
+		return v
 
 	def get_uint8(self, fail_value=0):
 		'''Extract a single uint8_t from the binary file at the current file position, returns a single integer'''
-		s = self.read_size(1)
-		if s:
-			v, = struct.unpack(self.byte_order + 'B', s)
-			return v
-		else:
+		if not (s := self.read_size(1)):
 			return fail_value
+		v, = struct.unpack(f'{self.byte_order}B', s)
+		return v
 
 	def get_sint16(self, fail_value=0):
 		'''Extract a single int16_t from the binary file at the current file position, returns a single integer'''
-		s = self.read_size(2)
-		if s:
-			v, = struct.unpack(self.byte_order + 'h', s)
-			return v
-		else:
+		if not (s := self.read_size(2)):
 			return fail_value
+		v, = struct.unpack(f'{self.byte_order}h', s)
+		return v
 
 	def get_uint16(self, fail_value=0):
 		'''Extract a single uint16_t from the binary file at the current file position, returns a single integer'''
-		s = self.read_size(2)
-		if s:
-			v, = struct.unpack(self.byte_order + 'H', s)
-			return v
-		else:
+		if not (s := self.read_size(2)):
 			return fail_value
+		v, = struct.unpack(f'{self.byte_order}H', s)
+		return v
 
 	def get_sint32(self, fail_value=0):
 		'''Extract a single int32_t from the binary file at the current file position, returns a single integer'''
-		s = self.read_size(4)
-		if s:
-			v, = struct.unpack(self.byte_order + 'i', s)
-			return v
-		else:
+		if not (s := self.read_size(4)):
 			return fail_value
+		v, = struct.unpack(f'{self.byte_order}i', s)
+		return v
 
 	def get_uint32(self, fail_value=0):
 		'''Extract a single uint32_t from the binary file at the current file position, returns a single integer'''
-		s = self.read_size(4)
-		if s:
-			v, = struct.unpack(self.byte_order + 'I', s)
-			return v
-		else:
+		if not (s := self.read_size(4)):
 			return fail_value
+		v, = struct.unpack(f'{self.byte_order}I', s)
+		return v
 
 	def get_sint64(self, fail_value=0):
 		'''Extract a single int64_t from the binary file at the current file position, returns a single integer'''
-		s = self.read_size(8)
-		if s:
-			v, = struct.unpack(self.byte_order + 'q', s)
-			return v
-		else:
+		if not (s := self.read_size(8)):
 			return fail_value
+		v, = struct.unpack(f'{self.byte_order}q', s)
+		return v
 
 	def get_uint64(self, fail_value=0):
 		'''Extract a single uint64_t from the binary file at the current file position, returns a single integer'''
-		s = self.read_size(8)
-		if s:
-			v, = struct.unpack(self.byte_order + 'Q', s)
-			return v
-		else:
+		if not (s := self.read_size(8)):
 			return fail_value
+		v, = struct.unpack(f'{self.byte_order}Q', s)
+		return v
 
 	def get_fixed_length_c_string(
 			self,
@@ -680,20 +648,18 @@ class FileExtract:
 			fail_value='',
 			isprint_only_with_space_padding=False):
 		'''Extract a single fixed length C string from the binary file at the current file position, returns a single C string'''
-		s = self.read_size(n)
-		if s:
-			cstr, = struct.unpack(self.byte_order + ("%i" % n) + 's', s)
-			# Strip trialing NULLs
-			cstr = cstr.decode()
-			cstr = cstr.strip("\0")
-			if isprint_only_with_space_padding:
-				for c in cstr:
-					if c in string.printable or ord(c) == 0:
-						continue
-					return fail_value
-			return cstr
-		else:
+		if not (s := self.read_size(n)):
 			return fail_value
+		cstr, = struct.unpack(self.byte_order + ("%i" % n) + 's', s)
+		# Strip trialing NULLs
+		cstr = cstr.decode()
+		cstr = cstr.strip("\0")
+		if isprint_only_with_space_padding:
+			for c in cstr:
+				if c in string.printable or ord(c) == 0:
+					continue
+				return fail_value
+		return cstr
 
 	def get_c_string(self):
 		'''Extract a single NULL terminated C string from the binary file at the current file position, returns a single C string'''
@@ -706,64 +672,56 @@ class FileExtract:
 
 	def get_n_sint8(self, n, fail_value=0):
 		'''Extract "n" int8_t integers from the binary file at the current file position, returns a list of integers'''
-		s = self.read_size(n)
-		if s:
+		if s := self.read_size(n):
 			return struct.unpack(self.byte_order + ("%u" % n) + 'b', s)
 		else:
 			return (fail_value,) * n
 
 	def get_n_uint8(self, n, fail_value=0):
 		'''Extract "n" uint8_t integers from the binary file at the current file position, returns a list of integers'''
-		s = self.read_size(n)
-		if s:
+		if s := self.read_size(n):
 			return struct.unpack(self.byte_order + ("%u" % n) + 'B', s)
 		else:
 			return (fail_value,) * n
 
 	def get_n_sint16(self, n, fail_value=0):
 		'''Extract "n" int16_t integers from the binary file at the current file position, returns a list of integers'''
-		s = self.read_size(2 * n)
-		if s:
+		if s := self.read_size(2 * n):
 			return struct.unpack(self.byte_order + ("%u" % n) + 'h', s)
 		else:
 			return (fail_value,) * n
 
 	def get_n_uint16(self, n, fail_value=0):
 		'''Extract "n" uint16_t integers from the binary file at the current file position, returns a list of integers'''
-		s = self.read_size(2 * n)
-		if s:
+		if s := self.read_size(2 * n):
 			return struct.unpack(self.byte_order + ("%u" % n) + 'H', s)
 		else:
 			return (fail_value,) * n
 
 	def get_n_sint32(self, n, fail_value=0):
 		'''Extract "n" int32_t integers from the binary file at the current file position, returns a list of integers'''
-		s = self.read_size(4 * n)
-		if s:
+		if s := self.read_size(4 * n):
 			return struct.unpack(self.byte_order + ("%u" % n) + 'i', s)
 		else:
 			return (fail_value,) * n
 
 	def get_n_uint32(self, n, fail_value=0):
 		'''Extract "n" uint32_t integers from the binary file at the current file position, returns a list of integers'''
-		s = self.read_size(4 * n)
-		if s:
+		if s := self.read_size(4 * n):
 			return struct.unpack(self.byte_order + ("%u" % n) + 'I', s)
 		else:
 			return (fail_value,) * n
 
 	def get_n_sint64(self, n, fail_value=0):
 		'''Extract "n" int64_t integers from the binary file at the current file position, returns a list of integers'''
-		s = self.read_size(8 * n)
-		if s:
+		if s := self.read_size(8 * n):
 			return struct.unpack(self.byte_order + ("%u" % n) + 'q', s)
 		else:
 			return (fail_value,) * n
 
 	def get_n_uint64(self, n, fail_value=0):
 		'''Extract "n" uint64_t integers from the binary file at the current file position, returns a list of integers'''
-		s = self.read_size(8 * n)
-		if s:
+		if s := self.read_size(8 * n):
 			return struct.unpack(self.byte_order + ("%u" % n) + 'Q', s)
 		else:
 			return (fail_value,) * n
@@ -780,23 +738,19 @@ class LookupDictionary(dict):
 
 	def get_keys_for_value(self, value, fail_value=None):
 		"""find the key(s) as a list given a value"""
-		list_result = [item[0] for item in self.items() if item[1] == value]
-		if len(list_result) > 0:
+		if list_result := [item[0] for item in self.items() if item[1] == value]:
 			return list_result
 		return fail_value
 
 	def get_first_key_for_value(self, value, fail_value=None):
 		"""return the first key of this dictionary given the value"""
-		list_result = [item[0] for item in self.items() if item[1] == value]
-		if len(list_result) > 0:
+		if list_result := [item[0] for item in self.items() if item[1] == value]:
 			return list_result[0]
 		return fail_value
 
 	def get_value(self, key, fail_value=None):
 		"""find the value given a key"""
-		if key in self:
-			return self[key]
-		return fail_value
+		return self[key] if key in self else fail_value
 
 
 class Enum(LookupDictionary):
@@ -809,10 +763,7 @@ class Enum(LookupDictionary):
 	def set_value(self, v):
 		v_typename = typeof(v).__name__
 		if v_typename == 'str':
-			if str in self:
-				v = self[v]
-			else:
-				v = 0
+			v = self[v] if str in self else 0
 		else:
 			self.value = v
 
@@ -1024,10 +975,14 @@ class Mach:
 		]
 
 		def __str__(self):
-			for info in self.cpu_infos:
-				if self.cpu == info[1] and (self.sub & 0x00ffffff) == info[2]:
-					return info[0]
-			return "{0:x}.{1:x}".format(self.cpu, self.sub)
+			return next(
+				(
+					info[0]
+					for info in self.cpu_infos
+					if self.cpu == info[1] and (self.sub & 0x00FFFFFF) == info[2]
+				),
+				"{0:x}.{1:x}".format(self.cpu, self.sub),
+			)
 
 	class Magic(Enum):
 
@@ -1044,23 +999,23 @@ class Mach:
 			Enum.__init__(self, initial_value, self.enum)
 
 		def is_skinny_mach_file(self):
-			return self.value == MH_MAGIC or self.value == MH_CIGAM or self.value == MH_MAGIC_64 or self.value == MH_CIGAM_64
+			return self.value in [MH_MAGIC, MH_CIGAM, MH_MAGIC_64, MH_CIGAM_64]
 
 		def is_universal_mach_file(self):
-			return self.value == FAT_MAGIC or self.value == FAT_CIGAM
+			return self.value in [FAT_MAGIC, FAT_CIGAM]
 
 		def unpack(self, data):
 			data.set_byte_order('native')
 			self.value = data.get_uint32()
 
 		def get_byte_order(self):
-			if self.value == MH_CIGAM or self.value == MH_CIGAM_64 or self.value == FAT_CIGAM:
+			if self.value in [MH_CIGAM, MH_CIGAM_64, FAT_CIGAM]:
 				return swap_unpack_char()
 			else:
 				return '='
 
 		def is_64_bit(self):
-			return self.value == MH_MAGIC_64 or self.value == MH_CIGAM_64
+			return self.value in [MH_MAGIC_64, MH_CIGAM_64]
 
 	def __init__(self, debugger):
 		self.magic = Mach.Magic()
@@ -1139,7 +1094,7 @@ class Mach:
 			self.file_off = 0
 			self.magic = None
 			self.nfat_arch = 0
-			self.archs = list()
+			self.archs = []
 			self.debugger = debugger
 
 		def description(self):
@@ -1148,7 +1103,7 @@ class Mach:
 			for arch in self.archs:
 				if len(archs_string):
 					archs_string += ', '
-				archs_string += '%s' % arch.arch
+				archs_string += f'{arch.arch}'
 			s += archs_string
 			s += ')'
 			return s
@@ -1340,8 +1295,8 @@ class Mach:
 			if self.bits & MH_NO_HEAP_EXECUTION:
 				s += 'MH_NO_HEAP_EXECUTION | '
 			# Strip the trailing " |" if we have any flags
-			if len(s) > 0:
-				s = s[0:-2]
+			if s != "":
+				s = s[:-2]
 			return s
 
 	class FileType(Enum):
@@ -1377,10 +1332,10 @@ class Mach:
 			self.sizeofcmds = 0
 			self.flags = Mach.Flags(0)
 			self.uuid = None
-			self.commands = list()
-			self.segments = list()
-			self.sections = list()
-			self.symbols = list()
+			self.commands = []
+			self.segments = []
+			self.sections = []
+			self.symbols = []
 			self.is_encrypted	= False
 			self.debugger		= debugger
 			self.sections.append(Mach.Section())
@@ -1407,7 +1362,7 @@ class Mach:
 			return True if self.flags.bits & MH_NO_HEAP_EXECUTION else True
 		
 		def has_nx_stack(self):
-			return False if self.flags.bits & MH_ALLOW_STACK_EXECUTION else True
+			return not self.flags.bits & MH_ALLOW_STACK_EXECUTION
 
 		def has_arc_and_strong_stack(self):
 			objc_release	  = False
@@ -1421,13 +1376,13 @@ class Mach:
 				if fnmatch.fnmatch(module.file.fullpath.lower(), self.path.lower()):
 
 					for i in module.symbols:
-						if i.name == "objc_release":
-							objc_release =  True
-						if i.name == "__stack_chk_guard":
-							__stack_chk_guard =  True
 						if i.name == "__stack_chk_fail":
 							__stack_chk_fail =  True
 
+						elif i.name == "__stack_chk_guard":
+							__stack_chk_guard =  True
+						elif i.name == "objc_release":
+							objc_release =  True
 			self.debugger.DeleteTarget(target)
 			self.debugger.SetSelectedTarget(selected_target)	# reset back to previously selected target
 
@@ -1436,7 +1391,7 @@ class Mach:
 		def has_restricted(self):
 			#3 cases restrictedBySetGUid, restrictedBySegment, restrictedByEntitlements
 			codesign = run_shell_command(f"codesign -dvvvv '{self.path}'").stderr.decode() #stderr ( :| ) ???
-			
+
 			if codesign and "Authority=Apple Root CA" in codesign:
 				authority = ""
 				for i in codesign.splitlines():
@@ -1448,12 +1403,14 @@ class Mach:
 				msg = "is_uid" if self.is_uid else "gid"
 				return f"True ({msg})"
 
-			#restrictedBySegment
-			for seg in self.segments:
-				if seg.segname.lower()=="__restrict":
-					return "True (__restrict)"
-
-			return False
+			return next(
+				(
+					"True (__restrict)"
+					for seg in self.segments
+					if seg.segname.lower() == "__restrict"
+				),
+				False,
+			)
 			
 		def description(self):
 			return '%#8.8x: %s (%s)' % (self.file_off, self.path, self.arch)
@@ -1475,7 +1432,7 @@ class Mach:
 			if self.is_64_bit():
 				data.get_uint32()  # Skip reserved word in mach_header_64
 
-			for i in range(0, self.ncmds):
+			for _ in range(0, self.ncmds):
 				lc = self.unpack_load_command(data)
 				self.commands.append(lc)
 
@@ -1489,23 +1446,26 @@ class Mach:
 			lc = Mach.LoadCommand()
 			lc.unpack(self, data)
 			lc_command = lc.command.get_enum_value()
-			if (lc_command == LC_SEGMENT or
-					lc_command == LC_SEGMENT_64):
+			if lc_command in [LC_SEGMENT, LC_SEGMENT_64]:
 				lc = Mach.SegmentLoadCommand(lc)
 				lc.unpack(self, data)
-			elif (lc_command == LC_LOAD_DYLIB or
-				  lc_command == LC_ID_DYLIB or
-				  lc_command == LC_LOAD_WEAK_DYLIB or
-				  lc_command == LC_REEXPORT_DYLIB):
+			elif lc_command in [
+				LC_LOAD_DYLIB,
+				LC_ID_DYLIB,
+				LC_LOAD_WEAK_DYLIB,
+				LC_REEXPORT_DYLIB,
+			]:
 				lc = Mach.DylibLoadCommand(lc)
 				lc.unpack(self, data)
-			elif (lc_command == LC_LOAD_DYLINKER or
-				  lc_command == LC_SUB_FRAMEWORK or
-				  lc_command == LC_SUB_CLIENT or
-				  lc_command == LC_SUB_UMBRELLA or
-				  lc_command == LC_SUB_LIBRARY or
-				  lc_command == LC_ID_DYLINKER or
-				  lc_command == LC_RPATH):
+			elif lc_command in [
+				LC_LOAD_DYLINKER,
+				LC_SUB_FRAMEWORK,
+				LC_SUB_CLIENT,
+				LC_SUB_UMBRELLA,
+				LC_SUB_LIBRARY,
+				LC_ID_DYLINKER,
+				LC_RPATH,
+			]:
 				lc = Mach.LoadDYLDLoadCommand(lc)
 				lc.unpack(self, data)
 			elif (lc_command == LC_DYLD_INFO_ONLY):
@@ -1520,9 +1480,11 @@ class Mach:
 			elif (lc_command == LC_UUID):
 				lc = Mach.UUIDLoadCommand(lc)
 				lc.unpack(self, data)
-			elif (lc_command == LC_CODE_SIGNATURE or
-				  lc_command == LC_SEGMENT_SPLIT_INFO or
-				  lc_command == LC_FUNCTION_STARTS):
+			elif lc_command in [
+				LC_CODE_SIGNATURE,
+				LC_SEGMENT_SPLIT_INFO,
+				LC_FUNCTION_STARTS,
+			]:
 				lc = Mach.DataBlobLoadCommand(lc)
 				lc.unpack(self, data)
 			elif (lc_command == LC_UNIXTHREAD):
@@ -1532,20 +1494,19 @@ class Mach:
 				lc = Mach.EncryptionInfoLoadCommand(lc)
 				lc.unpack(self, data)
 				self.is_encrypted = bool(cryptid)
-				
+
 			lc.skip(data)
 			return lc
 
 		def compare(self, rhs):
 			print("\nComparing:")
-			print("a) %s %s" % (self.arch, self.path))
-			print("b) %s %s" % (rhs.arch, rhs.path))
+			print(f"a) {self.arch} {self.path}")
+			print(f"b) {rhs.arch} {rhs.path}")
 			result = True
 			if self.type == rhs.type:
 				for lhs_section in self.sections[1:]:
-					rhs_section = rhs.get_section_by_section(lhs_section)
-					if rhs_section:
-						print('comparing %s.%s...' % (lhs_section.segname, lhs_section.sectname), end=' ')
+					if rhs_section := rhs.get_section_by_section(lhs_section):
+						print(f'comparing {lhs_section.segname}.{lhs_section.sectname}...', end=' ')
 						sys.stdout.flush()
 						lhs_data = lhs_section.get_contents(self)
 						rhs_data = rhs_section.get_contents(rhs)
@@ -1574,28 +1535,30 @@ class Mach:
 								# dump_hex_byte_string_diff(0, lhs_data, rhs_data)
 								# print 'b) %s' % (rhs_section)
 								# dump_hex_byte_string_diff(0, rhs_data, lhs_data)
-						elif lhs_data and not rhs_data:
+						elif lhs_data:
 							print('error: section data missing from b:')
-							print('a) %s' % (lhs_section))
-							print('b) %s' % (rhs_section))
+							print(f'a) {lhs_section}')
+							print(f'b) {rhs_section}')
 							result = False
-						elif not lhs_data and rhs_data:
+						elif rhs_data:
 							print('error: section data missing from a:')
-							print('a) %s' % (lhs_section))
-							print('b) %s' % (rhs_section))
+							print(f'a) {lhs_section}')
+							print(f'b) {rhs_section}')
 							result = False
 						elif lhs_section.offset or rhs_section.offset:
 							print('error: section data missing for both a and b:')
-							print('a) %s' % (lhs_section))
-							print('b) %s' % (rhs_section))
+							print(f'a) {lhs_section}')
+							print(f'b) {rhs_section}')
 							result = False
 						else:
 							print('ok')
 					else:
 						result = False
-						print('error: section %s is missing in %s' % (lhs_section.sectname, rhs.path))
+						print(f'error: section {lhs_section.sectname} is missing in {rhs.path}')
 			else:
-				print('error: comparing a %s mach-o file with a %s mach-o file is not supported' % (self.type, rhs.type))
+				print(
+					f'error: comparing a {self.type} mach-o file with a {rhs.type} mach-o file is not supported'
+				)
 				result = False
 			if not result:
 				print('error: mach files differ')
@@ -1652,16 +1615,25 @@ class Mach:
 				print(lc)
 
 		def get_section_by_name(self, name):
-			for section in self.sections:
-				if section.sectname and section.sectname == name:
-					return section
-			return None
+			return next(
+				(
+					section
+					for section in self.sections
+					if section.sectname and section.sectname == name
+				),
+				None,
+			)
 
 		def get_section_by_section(self, other_section):
-			for section in self.sections:
-				if section.sectname == other_section.sectname and section.segname == other_section.segname:
-					return section
-			return None
+			return next(
+				(
+					section
+					for section in self.sections
+					if section.sectname == other_section.sectname
+					and section.segname == other_section.segname
+				),
+				None,
+			)
 
 		def dump_sections(self, dump_description=True, options=None):
 			if dump_description:
@@ -1670,93 +1642,90 @@ class Mach:
 			if num_sections > 1:
 				self.sections[1].dump_header()
 				for sect_idx in range(1, num_sections):
-					print("%s" % self.sections[sect_idx])
+					print(f"{self.sections[sect_idx]}")
 
 		def dump_section_contents(self, options):
 			saved_section_to_disk = False
 			for sectname in options.section_names:
-				section = self.get_section_by_name(sectname)
-				if section:
+				if section := self.get_section_by_name(sectname):
 					sect_bytes = section.get_contents(self)
 					if options.outfile:
 						if not saved_section_to_disk:
-							outfile = open(options.outfile, 'w')
-							if options.extract_modules:
-								# print "Extracting modules from mach file..."
-								data = file_extract.FileExtract(
-									io.BytesIO(sect_bytes), self.data.byte_order)
-								version = data.get_uint32()
-								num_modules = data.get_uint32()
-								# print "version = %u, num_modules = %u" %
-								# (version, num_modules)
-								for i in range(num_modules):
-									data_offset = data.get_uint64()
-									data_size = data.get_uint64()
-									name_offset = data.get_uint32()
-									language = data.get_uint32()
-									flags = data.get_uint32()
-									data.seek(name_offset)
-									module_name = data.get_c_string()
-									# print "module[%u] data_offset = %#16.16x,
-									# data_size = %#16.16x, name_offset =
-									# %#16.16x (%s), language = %u, flags =
-									# %#x" % (i, data_offset, data_size,
-									# name_offset, module_name, language,
-									# flags)
-									data.seek(data_offset)
-									outfile.write(data.read_size(data_size))
-							else:
-								print("Saving section %s to '%s'" % (sectname, options.outfile))
-								outfile.write(sect_bytes)
-							outfile.close()
+							with open(options.outfile, 'w') as outfile:
+								if options.extract_modules:
+									# print "Extracting modules from mach file..."
+									data = file_extract.FileExtract(
+										io.BytesIO(sect_bytes), self.data.byte_order)
+									version = data.get_uint32()
+									num_modules = data.get_uint32()
+															# print "version = %u, num_modules = %u" %
+															# (version, num_modules)
+									for _ in range(num_modules):
+										data_offset = data.get_uint64()
+										data_size = data.get_uint64()
+										name_offset = data.get_uint32()
+										language = data.get_uint32()
+										flags = data.get_uint32()
+										data.seek(name_offset)
+										module_name = data.get_c_string()
+										# print "module[%u] data_offset = %#16.16x,
+										# data_size = %#16.16x, name_offset =
+										# %#16.16x (%s), language = %u, flags =
+										# %#x" % (i, data_offset, data_size,
+										# name_offset, module_name, language,
+										# flags)
+										data.seek(data_offset)
+										outfile.write(data.read_size(data_size))
+								else:
+									print(f"Saving section {sectname} to '{options.outfile}'")
+									outfile.write(sect_bytes)
 							saved_section_to_disk = True
 						else:
-							print("error: you can only save a single section to disk at a time, skipping section '%s'" % (sectname))
+							print(
+								f"error: you can only save a single section to disk at a time, skipping section '{sectname}'"
+							)
 					else:
 						print('section %s:\n' % (sectname))
 						section.dump_header()
 						print('%s\n' % (section))
 						dump_memory(0, sect_bytes, options.max_count, 16)
 				else:
-					print('error: no section named "%s" was found' % (sectname))
+					print(f'error: no section named "{sectname}" was found')
 
 		def get_segment(self, segname):
 			if len(self.segments) == 1 and self.segments[0].segname == '':
 				return self.segments[0]
-			for segment in self.segments:
-				if segment.segname == segname:
-					return segment
-			return None
+			return next(
+				(segment for segment in self.segments if segment.segname == segname), None
+			)
 
 		def get_first_load_command(self, lc_enum_value):
-			for lc in self.commands:
-				if lc.command.value == lc_enum_value:
-					return lc
-			return None
+			return next(
+				(lc for lc in self.commands if lc.command.value == lc_enum_value), None
+			)
 
 		def get_symtab(self):
-			if self.data and not self.symbols:
-				lc_symtab = self.get_first_load_command(LC_SYMTAB)
-				if lc_symtab:
-					symtab_offset = self.file_off
-					if self.data.is_in_memory():
-						linkedit_segment = self.get_segment('__LINKEDIT')
-						if linkedit_segment:
-							linkedit_vmaddr = linkedit_segment.vmaddr
-							linkedit_fileoff = linkedit_segment.fileoff
-							symtab_offset = linkedit_vmaddr + lc_symtab.symoff - linkedit_fileoff
-							symtab_offset = linkedit_vmaddr + lc_symtab.stroff - linkedit_fileoff
-					else:
-						symtab_offset += lc_symtab.symoff
-
-					self.data.seek(symtab_offset)
-					is_64 = self.is_64_bit()
-					for i in range(lc_symtab.nsyms):
-						nlist = Mach.NList()
-						nlist.unpack(self, self.data, lc_symtab)
-						self.symbols.append(nlist)
+			if not self.data or self.symbols:
+				return
+			if lc_symtab := self.get_first_load_command(LC_SYMTAB):
+				symtab_offset = self.file_off
+				if self.data.is_in_memory():
+					if linkedit_segment := self.get_segment('__LINKEDIT'):
+						linkedit_vmaddr = linkedit_segment.vmaddr
+						linkedit_fileoff = linkedit_segment.fileoff
+						symtab_offset = linkedit_vmaddr + lc_symtab.symoff - linkedit_fileoff
+						symtab_offset = linkedit_vmaddr + lc_symtab.stroff - linkedit_fileoff
 				else:
-					print("no LC_SYMTAB")
+					symtab_offset += lc_symtab.symoff
+
+				self.data.seek(symtab_offset)
+				is_64 = self.is_64_bit()
+				for _ in range(lc_symtab.nsyms):
+					nlist = Mach.NList()
+					nlist.unpack(self, self.data, lc_symtab)
+					self.symbols.append(nlist)
+			else:
+				print("no LC_SYMTAB")
 
 		def dump_symtab(self, dump_description=True, options=None):
 			self.get_symtab()
@@ -1826,10 +1795,7 @@ class Mach:
 				Enum.__init__(self, initial_value, self.enum)
 
 		def __init__(self, c=None, l=0, o=0):
-			if c is not None:
-				self.command = c
-			else:
-				self.command = Mach.LoadCommand.Command(0)
+			self.command = c if c is not None else Mach.LoadCommand.Command(0)
 			self.length = l
 			self.file_off = o
 
@@ -1896,8 +1862,7 @@ class Mach:
 			'''Get the section contents as a python string'''
 			if self.size > 0 and mach_file.get_segment(
 					self.segname).filesize > 0:
-				data = mach_file.get_data()
-				if data:
+				if data := mach_file.get_data():
 					section_data_offset = mach_file.file_off + self.offset
 					# print '%s.%s is at offset 0x%x with size 0x%x' %
 					# (self.segname, self.sectname, section_data_offset,
@@ -1944,7 +1909,7 @@ class Mach:
 
 		def __str__(self):
 			s = Mach.LoadCommand.__str__(self)
-			s += "%s" % self.name
+			s += f"{self.name}"
 			return s
 
 	class UnixThreadLoadCommand(LoadCommand):
@@ -1954,7 +1919,7 @@ class Mach:
 			def __init__(self):
 				self.flavor = 0
 				self.count = 0
-				self.register_values = list()
+				self.register_values = []
 
 			def unpack(self, data):
 				self.flavor, self.count = data.get_n_uint32(2)
@@ -1963,17 +1928,15 @@ class Mach:
 			def __str__(self):
 				s = "flavor = %u, count = %u, regs =" % (
 					self.flavor, self.count)
-				i = 0
-				for register_value in self.register_values:
+				for i, register_value in enumerate(self.register_values):
 					if i % 8 == 0:
 						s += "\n                                            "
 					s += " %#8.8x" % register_value
-					i += 1
 				return s
 
 		def __init__(self, lc):
 			Mach.LoadCommand.__init__(self, lc.command, lc.length, lc.file_off)
-			self.reg_sets = list()
+			self.reg_sets = []
 
 		def unpack(self, mach_file, data):
 			reg_set = Mach.UnixThreadLoadCommand.ThreadState()
@@ -1983,7 +1946,7 @@ class Mach:
 		def __str__(self):
 			s = Mach.LoadCommand.__str__(self)
 			for reg_set in self.reg_sets:
-				s += "%s" % reg_set
+				s += f"{reg_set}"
 			return s
 
 	class DYLDInfoOnlyLoadCommand(LoadCommand):
@@ -2108,9 +2071,7 @@ class Mach:
 
 		def unpack(self, mach_file, data):
 			uuid_data = data.get_n_uint8(16)
-			uuid_str = ''
-			for byte in uuid_data:
-				uuid_str += '%2.2x' % byte
+			uuid_str = ''.join('%2.2x' % byte for byte in uuid_data)
 			self.uuid = uuid.UUID(uuid_str)
 			mach_file.uuid = self.uuid
 
@@ -2179,7 +2140,7 @@ class Mach:
 			self.maxprot, self.initprot, self.nsects, self.flags = data.get_n_uint32(4)
 			mach_file.segments.append(self)
 
-			for i in range(self.nsects):
+			for _ in range(self.nsects):
 				section = Mach.Section()
 				section.unpack(is_64, data)
 				section.index = len(mach_file.sections)
@@ -2195,7 +2156,7 @@ class Mach:
 					self.vmaddr, self.vmsize, self.fileoff, self.filesize)
 			s += "%s %s %3u %#8.8x" % (vm_prot_names[self.maxprot], vm_prot_names[
 									   self.initprot], self.nsects, self.flags)
-			s += ' ' + self.segname
+			s += f' {self.segname}'
 			return s
 
 	class NList:
@@ -2245,7 +2206,7 @@ class Mach:
 				n_type = self.value
 				if n_type & N_STAB:
 					stab = Mach.NList.Type.Stab(self.value)
-					return '%s' % stab
+					return f'{stab}'
 				else:
 					type = self.value & N_TYPE
 					type_str = ''
@@ -2281,10 +2242,7 @@ class Mach:
 			self.name_offset = data.get_uint32()
 			self.type.value, self.sect_idx = data.get_n_uint8(2)
 			self.desc = data.get_uint16()
-			if mach_file.is_64_bit():
-				self.value = data.get_uint64()
-			else:
-				self.value = data.get_uint32()
+			self.value = data.get_uint64() if mach_file.is_64_bit() else data.get_uint32()
 			data.push_offset_and_seek(
 				mach_file.file_off +
 				symtab_lc.stroff +
@@ -2294,9 +2252,7 @@ class Mach:
 			data.pop_offset_and_seek()
 
 		def __str__(self):
-			name_display = ''
-			if len(self.name):
-				name_display = ' "%s"' % self.name
+			name_display = f' "{self.name}"' if len(self.name) else ''
 			return '%#8.8x %#2.2x (%-20s) %#2.2x %#4.4x %16.16x%s' % (self.name_offset,
 																	  self.type.value, self.type, self.sect_idx, self.desc, self.value, name_display)
 
@@ -2312,7 +2268,7 @@ class Mach:
 
 		def default(self, line):
 			'''Catch all for unknown command, which will exit the interpreter.'''
-			print("uknown command: %s" % line)
+			print(f"uknown command: {line}")
 			return True
 
 		def do_q(self, line):
@@ -2397,18 +2353,17 @@ def dereference(pointer):
 	chain = []
 
 	# recursively dereference
-	for i in range(0, MAX_DEREF):
+	for _ in range(0, MAX_DEREF):
 		ptr = t.process.ReadPointerFromMemory(addr, error)
-		if error.Success():
-			if ptr in chain:
-				chain.append(('circular', 'circular'))
-				break
-			chain.append(('pointer', addr))
-			addr = ptr
-		else:
+		if not error.Success():
 			break
 
-	if len(chain) == 0:
+		if ptr in chain:
+			chain.append(('circular', 'circular'))
+			break
+		chain.append(('pointer', addr))
+		addr = ptr
+	if not chain:
 		# errlog(f"0x{pointer:x} is not a valid pointer")
 		return
 
@@ -2434,14 +2389,14 @@ def dereference(pointer):
 					break
 			if len(s):
 				chain.append(('string', s))
-		
+
 		except:
 			pass
 
 	return chain
 
 def format_address(address, size=8, pad=True, prefix='0x'):
-	fmt = '{:' + ('0=' + str(size * 2) if pad else '') + 'X}'
+	fmt = '{:' + (f'0={str(size * 2)}' if pad else '') + 'X}'
 	addr_str = fmt.format(address)
 	if prefix:
 		addr_str = prefix + addr_str
@@ -2449,20 +2404,20 @@ def format_address(address, size=8, pad=True, prefix='0x'):
 
 def get_deref_chain_as_string(chain):
 	for i, (t, item) in enumerate(chain):
-		if t == "pointer":
+		if t == "circular":
+			yield (GRN, '(circular)')
+		elif t == "pointer":
 			yield (MAG, format_address(item, size=16, pad=False))
 		elif t == "string":
 			for r in ['\n', '\r', '\v']:
 				item = item.replace(r, '\\{:x}'.format(ord(r)))
-			yield (RED, '"' + item + '"')
+			yield (RED, f'"{item}"')
+		elif t == "symbol":
+			yield (BLU, f'`{item}`')
 		elif t == "unicode":
 			for r in ['\n', '\r', '\v']:
 				item = item.replace(r, '\\{:x}'.format(ord(r)))
-			yield (RED, 'u"' + item + '"')
-		elif t == "symbol":
-			yield (BLU, '`' + item + '`')
-		elif t == "circular":
-			yield (GRN, '(circular)')
+			yield (RED, f'u"{item}"')
 		if i < len(chain) - 1:
 			yield (CYN, ' => ')
 
@@ -2482,7 +2437,7 @@ def parse_stopDescription(description):
 	desc = description.translate(table)
 
 	if not (desc.startswith("EXC_") or desc.startswith("code=")):
-		print("WARNING: Malformed exception description output %s" % desc)
+		print(f"WARNING: Malformed exception description output {desc}")
 		return None, None, None
 
 	fields = desc.split()
@@ -2492,12 +2447,14 @@ def parse_stopDescription(description):
 
 	exc = fields[0]
 	code = fields[1].split("=", 2)[1]
-	extra = None
-	for f in fields:
-		if f.startswith("address=") or f.startswith("subcode="):
-			extra = f.split("=", 2)[1]
-			break
-
+	extra = next(
+		(
+			f.split("=", 2)[1]
+			for f in fields
+			if f.startswith("address=") or f.startswith("subcode=")
+		),
+		None,
+	)
 	return [exc, code, extra]
 
 def check_if_recursion(thread):
@@ -2543,17 +2500,11 @@ def is_stack_suspicious(thread, exception, code, extra):
 
 	if funcs:
 		return " ".join(funcs)
-	
-	if exception == "EXC_BREAKPOINT":
-		return NO_CHANGE
 
-	return False
+	return NO_CHANGE if exception == "EXC_BREAKPOINT" else False
 		
 def is_near_null(address):
-	if address < 16 * get_host_pagesize():
-		return True
-	
-	return False
+	return address < 16 * get_host_pagesize()
 
 def flags_to_human(reg_value, value_table):
 	"""Return a human readable string showing the flag states."""
@@ -2562,7 +2513,7 @@ def flags_to_human(reg_value, value_table):
 		# flag_str = Color.boldify(value_table[i].upper()) if reg_value & (1<<i) else value_table[i].lower()
 		flag_str = f"{RED}{value_table[i].upper()}{RST}" if reg_value & (1<<i) else value_table[i].lower()
 		flags.append(flag_str)
-	return "[{}]".format(" ".join(flags))
+	return f'[{" ".join(flags)}]'
 
 class Architecture(object):
 	"""Generic metaclass for the architecture supported by GEF."""
@@ -2633,9 +2584,12 @@ def capstone_analyze_pc(current_arch, insn, nb_insn):
 
 	if current_arch.is_call(insn):
 		target_address = int(insn.operands[-1].split()[0], 16)
-		msg = []
-		for i, new_insn in enumerate(capstone_disassemble(target_address, nb_insn)):
-			msg.append("   {}  {}".format (DOWN_ARROW if i==0 else " ", str(new_insn)))
+		msg = [
+			f'   {DOWN_ARROW if i == 0 else " "}  {str(new_insn)}'
+			for i, new_insn in enumerate(
+				capstone_disassemble(target_address, nb_insn)
+			)
+		]
 		return (True, "\n".join(msg))
 
 	return (False, "")
